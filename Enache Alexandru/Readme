@@ -1,0 +1,4 @@
+Rootkit ce urmareste stabilirea unei conexiuni cu un calculator ce a comunicat folosind KEY-ul transmis. 
+Pentru folosirea cu succes a codului, trebuie sa setam variabila de mediu LD_PRELOAD (obs. in laboratorul 1) astfel incat sa specificam calea catre noua noastra biblioteca partajata ("rootkit.so") (aceasta contine noile implementari ale functiilor 'hooked').
+Noile functii inlocuite folosind tehnica hook asigura conexiunea cu calculatorul afectat in cazul folosirii KEY-ului, ascundem la deschiderea unui fisier dovada conexiunii pe portul sursa, si suprascriem functia readdir pentru a ascunde libraria partajata a rootkitului (in special cand executam comanda ls).
+-- codul ramane pentru a fi testat --
