@@ -1,0 +1,8 @@
+Review:
+
+fisierele myprintf.c si mylib.h
+din working directory se executa urmatoarele:
+
+$ gcc -fPIC -c myprintf.c -o obiect.o
+$ gcc -shared obiect.o -o libmylib.so
+$ export LD_PRELOAD=$LD_PRELOAD:./libmylib.so
