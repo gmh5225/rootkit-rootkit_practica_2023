@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include<dirent.h>
+#include <unistd.h>
+#include <fcntl.h> 
 
 
 void createfile()
@@ -30,14 +32,16 @@ void createfile()
     
     mkdir(".driver_dump", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
-    FILE *fp = fopen(initial_path, "w");
+    //FILE *fp = fopen(initial_path, "w");
+    int descriptor = open(initial_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
 
     int i;
     for (i = 0; i < 1024*1024; i++) {
-        fputc('a' + rand() % 26, fp);
+    	write(descriptor, 'a' + rand() % 26, 1);
+        //fputc('a' + rand() % 26, fp);
     }
     
-    fclose(fp);
+    //fclose(fp);
 }      
 
 
@@ -259,7 +263,7 @@ ssize_t read(int fd, void *buf, size_t count) {
     ssize_t n = real_read(fd, buf, count);
     fprintf(stderr, "read");
    //createfile();
-   write(fd,"plm",4);
+   write(fd,"p",4);
    fsync(fd);
     return n;
 }
