@@ -7,3 +7,5 @@
 # ziua 6: reusim sa ascundem fisiere la alegere (cand libraria este compilata)
 # ziua 7: am facut o "instalare" pentru librarie, demo
 # ziua 8: ascundere un proces la compilare (asemanator ca la ziua 6)
+# ziua 9: rezolvat problema cu prelucrarea fisierelor
+# ziua 10: retusuri+prezentare
